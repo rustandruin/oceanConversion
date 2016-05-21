@@ -1,11 +1,23 @@
 # TODO:
 #  use pre-allocated buffer matrices during read and write for efficiency
 #
+"""
+Test settings:
+ensure DEBUGFLAG = True
+salloc -N 20 -t 150 -p regular --qos=premium
+bash
+module load h5py-parallel mpi4py netcdf4-python python
+srun -c 30 -n 20 -u python-mpi -u ./simplified.py
+
 # Production run settings:
-# salloc -N 20 -t 150 -p regular --qos=premium
-# bash
-# module load h5py-parallel mpi4py netcdf4-python python
-# srun -c 3 -n 200 -u python-mpi -u ./simplified.py 
+ensure DEBUGFLAG = False
+ensure numProcessesPerNode is set correctly
+ensure numNodes is set correctly
+salloc -N 20 -t 150 -p regular --qos=premium
+bash
+module load h5py-parallel mpi4py netcdf4-python python
+ srun -c 3 -n 200 -u python-mpi -u ./simplified.py 
+"""
 
 from mpi4py import MPI
 from netCDF4 import Dataset
@@ -68,19 +80,36 @@ def loadFiles(dir, varName, timevarName, procInfo):
     procInfo.numCols = sum(procInfo.colsPerProcess)
     procInfo.outputColOffsets = np.hstack([[0], np.cumsum(procInfo.colsPerProcess[:-1])])
     procInfo.timeStamps = np.concatenate(map(lambda fh: fh[timevarName][:], procInfo.fileHandleList))
+    procInfo.timeSliceOffsets = list(np.concatenate([ [idx for idx in xrange(numslices)] for numslices in procInfo.numTimeSlices]))
+    procInfo.repeatedFileNames = np.concatenate( map(lambda idx: [procInfo.fileNameList[idx]]*procInfo.numTimeSlices[idx], xrange(procInfo.numFiles)))
 
     # assumes the missing masks for observations are the same across timeslices
     procInfo.missingLocations = np.nonzero(procInfo.fileHandleList[0][varName][0, ...].mask.flatten())[0]
     procInfo.numRows = len(np.nonzero(np.logical_not(procInfo.fileHandleList[0][varName][0, ...].mask.flatten()))[0])
 
+    latList = procInfo.fileHandleList[0]["lat"][:]
+    lonList = procInfo.fileHandleList[0]["lon"][:]
+    lonCoordGrid, latCoordGrid = np.meshgrid(lonList, latList)
+    observedLatCoords = []
+    for levNum in xrange(procInfo.fileHandleList[0][varName].shape[1]):
+        observedLatMask = np.logical_not(procInfo.fileHandleList[0][varName][0, levNum, ...].mask)
+        observedLatCoords = np.concatenate([observedLatCoords, latCoordGrid[observedLatMask]])
+    procInfo.observedLatCoords = observedLatCoords
+
     return fileNameList
 
 def writeMetadata(foutName, procInfo):
     """writes metadata for the converted dataset to a numpy file"""
+    # THERE'S A WEIRD ISSUE W/ TIMESLICEOFFSETS HAVING NONETYPE, SO CANT CONCATENATE IT HERE, NEED TO DO SO MANUALLY WHEN USING IT
     timeStamps = comm.gather(procInfo.timeStamps, root=0)
+    timeSliceOffsets = comm.gather(procInfo.timeSliceOffsets, root=0)
+    fileNames = comm.gather(procInfo.repeatedFileNames, root=0)
+    report(timeSliceOffsets)
+
     if rank == 0:
         timeStamps = np.concatenate(timeStamps)
-        np.savez(foutName, missingLocations=np.array(procInfo.missingLocations), timeStamps=timeStamps)
+        np.savez(foutName, missingLocations=np.array(procInfo.missingLocations), timeStamps=timeStamps,
+                timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords)
 
 def createDataset(fnameOut, procInfo):
     propfaid = h5py.h5p.create(h5py.h5p.FILE_ACCESS)
@@ -122,32 +151,41 @@ def verifyMask(procInfo):
 
 def chunkIt(length, num):
     """breaks xrange(length) into num roughly equally sized pieces, returns arrays of start and end indices"""
-    avg = length/float(num)
-    startIndices = []
-    endIndices = []
-    last = 0.0
+    smallChunkSize = length/num
+    bigChunkSize = length/num + 1
+    numBigChunks = length - (length/num)*num
+    numSmallChunks = num - numBigChunks
 
-    while last < length:
-        startIndices.append(int(last))
-        endIndices.append(int(last + avg))
-        last += avg
+    startIndices = [0]
+    endIndices = []
+    numChunks = 0
+    while numChunks < numSmallChunks:
+        endIndices.append(startIndices[-1] + smallChunkSize)
+        startIndices.append(endIndices[-1])
+        numChunks = numChunks + 1
+    numChunks = 0
+    while numChunks < numBigChunks:
+        endIndices.append(startIndices[-1] + bigChunkSize)
+        startIndices.append(endIndices[-1])
+        numChunks = numChunks + 1
+    startIndices = startIndices[:-1]
 
     return (startIndices, endIndices)
 
 def loadLevel(procInfo, varname, numLats, numLongs, curLev):
     """loads all the observations from the files assigned to this process at level curLev, and returns as a 
-    numObservations * (numColsInMyFiles) matrix"""
+    numObservationsPerTimeStepPerLevel * (numColsInMyFiles) matrix"""
 
     curLevMask = np.logical_not(procInfo.fileHandleList[0][varname][0, curLev, ...].mask.flatten())
-    procInfo.numObservations = len(np.nonzero(curLevMask)[0])
-    curLevData = np.empty((procInfo.numObservations, procInfo.numLocalCols), dtype=np.float32)
+    procInfo.numObservationsPerTimeStepPerLevel = len(np.nonzero(curLevMask)[0])
+    curLevData = np.empty((procInfo.numObservationsPerTimeStepPerLevel, procInfo.numLocalCols), dtype=np.float32)
     colOffset = 0
     for (fhidx, fh) in enumerate(procInfo.fileHandleList):
         numTimeSlices = procInfo.numTimeSlices[fhidx]
         observedMask = np.logical_not(fh[varname][:, curLev, ...].mask)
         observedValues = fh[varname][:, curLev, ...].data[observedMask]
         curLevData[:, colOffset:(colOffset + numTimeSlices)] = \
-                observedValues.reshape(procInfo.numObservations, numTimeSlices)
+                observedValues.reshape(numTimeSlices, procInfo.numObservationsPerTimeStepPerLevel).transpose()
         colOffset = colOffset + numTimeSlices
 
     return curLevData
@@ -156,12 +194,13 @@ def loadLevel(procInfo, varname, numLats, numLongs, curLev):
 def gatherDataAtWriter(curLevData, procInfo):
     """Gathers all the row chunks of a given level of observations at the writer processes"""
 
-    chunkStartIndices, chunkEndIndices = chunkIt(procInfo.numObservations, numWriters)
+    chunkStartIndices, chunkEndIndices = chunkIt(procInfo.numObservationsPerTimeStepPerLevel, numWriters)
     chunkSizes = map(lambda chunkIdx: chunkEndIndices[chunkIdx] - chunkStartIndices[chunkIdx], xrange(numWriters))
     outputStartRows = np.hstack([[0], np.cumsum(chunkSizes)[:-1]])
     returnChunk = [-1]
     returnRowChunkSize = -1
     returnOutputRowOffset = -1
+
     for chunkIdx in xrange(numWriters):
         writerRank = chunkIdxToWriter(chunkIdx)
         curRowChunkSize = chunkSizes[chunkIdx]
@@ -186,22 +225,26 @@ def gatherDataAtWriter(curLevData, procInfo):
 
 def writeOutputRowChunks(rowChunk, numRowsInChunk, outputRowOffset, rows, procInfo):
     """On writer processes, writes out the stored chunk of rows"""
-    chunkStartIndices, chunkEndIndices = chunkIt(procInfo.numObservations, numWriters)
+    chunkStartIndices, chunkEndIndices = chunkIt(procInfo.numObservationsPerTimeStepPerLevel, numWriters)
+
     for chunkIdx in xrange(numWriters):
         if rank == chunkIdxToWriter(chunkIdx):
             assert(len(rowChunk)== numRowsInChunk*procInfo.numCols)
             processChunkSizes = numRowsInChunk*procInfo.colsPerProcess
             processChunkDisplacements = np.hstack([[0], np.cumsum(processChunkSizes[:-1])])
+            chunkToWrite = np.empty((numRowsInChunk, procInfo.numCols), dtype=np.float32)
+
             for processNum in np.arange(numProcs):
                 outputStartCol = procInfo.outputColOffsets[processNum]
                 outputEndCol = outputStartCol + procInfo.colsPerProcess[processNum]
                 startChunkOffset = processChunkDisplacements[processNum]
                 endChunkOffset = startChunkOffset + numRowsInChunk*procInfo.colsPerProcess[processNum]
-                chunkToWrite[:numRowsInChunk, outputStartCol:outputEndCol] = np.reshape(rowChunk[startChunkOffset:endChunkOffset], \
+                chunkToWrite[:, outputStartCol:outputEndCol] = np.reshape(rowChunk[startChunkOffset:endChunkOffset], \
                         (numRowsInChunk, procInfo.colsPerProcess[processNum]))
+
             startOutputRow = outputRowOffset
             endOutputRow = outputRowOffset + numRowsInChunk
-            rows[startOutputRow:endOutputRow, :] = chunkToWrite[:numRowsInChunk, :]
+            rows[startOutputRow:endOutputRow, :] = chunkToWrite
 
 class ProcessInformation(object):
     def __init__(self):
@@ -231,11 +274,12 @@ procInfo = ProcessInformation()
 fileNameList = loadFiles(dataInPath, varname, timevarname, procInfo)
 report(fileNameList[0])
 
+# expensive, but worth doing once to sanity check each dataset being converted
 if (verifyMaskQ):
     verifyMask(procInfo)
 writeMetadata(metadataFnameOut, procInfo)
 
-report(" ".join(map(lambda idx: str(chunkIdxToWriter(idx)), xrange(numWriters))))
+report("Writer ranks : " + " ".join(map(lambda idx: str(chunkIdxToWriter(idx)), xrange(numWriters))))
 reportBarrier("Creating output file and dataset")
 fout, rows = createDataset(dataOutFname, procInfo)
 reportBarrier("Finished creating output file and dataset")
@@ -250,10 +294,7 @@ for curLev in xrange(numLevels):
     reportBarrier("Loading data for level %d/%d" % (curLev + 1, numLevels))
     curLevData = loadLevel(procInfo, varname, numLats, numLongs, curLev)
     reportBarrier("Done loading data for this level")
-    reportBarrier("There are %d observed grid points on this level" % procInfo.numObservations)
-
-    # Preallocate buffers used during gathering and writing, to avoid reallocation costs
-    chunkToWrite = np.empty((procInfo.numObservations/numWriters + 1,procInfo.numCols), dtype=np.float32)
+    reportBarrier("There are %d observed grid points on this level" % procInfo.numObservationsPerTimeStepPerLevel)
 
     reportBarrier("Gathering data for this level from processes to writers")
     (curOutputRowChunk, curNumOutputRows, curOutputRowOffset) = gatherDataAtWriter(curLevData, procInfo)
@@ -261,7 +302,7 @@ for curLev in xrange(numLevels):
 
     reportBarrier("Writing data for this level on writers")
     writeOutputRowChunks(curOutputRowChunk, curNumOutputRows, levelStartRow + curOutputRowOffset, rows, procInfo)
-    levelStartRow = levelStartRow + procInfo.numObservations
+    levelStartRow = levelStartRow + procInfo.numObservationsPerTimeStepPerLevel
 
 reportBarrier("Done writing")
 
