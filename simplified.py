@@ -4,17 +4,6 @@
 """
 Test settings:
 ensure DEBUGFLAG = True
-salloc -N 20 -t 150 -p regular --qos=premium
-bash
-module load h5py-parallel mpi4py netcdf4-python python
-srun -c 30 -n 20 -u python-mpi -u ./simplified.py
-
-# Production run settings:
-ensure DEBUGFLAG = False
-ensure numProcessesPerNode is set correctly
-ensure numNodes is set correctly
-salloc -N 20 -t 150 -p regular --qos=premium
-bash
 module load h5py-parallel mpi4py netcdf4-python python
  srun -c 3 -n 200 -u python-mpi -u ./simplified.py 
 """
@@ -253,14 +242,14 @@ class ProcessInformation(object):
 # Variables that should really be command-line settings
 DEBUGFLAG = True
 numNodes = 20
-numProcessesPerNode = 1
+numProcessesPerNode = 10
 numWriters = 20 # a good choice is one per physical node
 verifyMaskQ = False
 dataInPath = "/global/cscratch1/sd/nrcavana/CFSR_OCEAN/"
-dataOutFname = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/ocean.h5"
+dataOutFname = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/output/ocean.h5"
 varname = "POT_L160_Avg_1"
 timevarname = "ref_date_time"
-metadataFnameOut = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/oceanMetadata.npz"
+metadataFnameOut = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/output/oceanMetadata.npz"
 
 numLevels = 40
 numLats = 360

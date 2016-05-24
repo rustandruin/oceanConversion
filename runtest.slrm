@@ -1,0 +1,10 @@
+#!/bin/bash -l
+
+#SBATCH -N 20
+#SBATCH -t 20
+#SBATCH -p regular
+#SBATCH --qos=premium
+
+bash
+module load netcdf4-python mpi4py python h5py-parallel
+srun -c 3 -n 200 -u python-mpi -u ./simplified.py
