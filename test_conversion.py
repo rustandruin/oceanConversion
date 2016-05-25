@@ -3,7 +3,7 @@
 # observation are correct
 #
 # To run: first do a 
-#  module load python netcdf4-python h5py-parallel mpi4py
+#  module load python netcdf4-python h5py
 # then start ipython and run this code interactively
 
 import numpy as np
@@ -27,14 +27,16 @@ np.linalg.norm(rawCol - convertedCol) # this should be zero on success
 
 numColSamples = 20
 
-outputMat = h5py.File("ocean.h5", "r")["rows"]
+outputFname = "output/ocean.h5"
+outputMat = h5py.File(outputFname, "r")["rows"]
 numCols = outputMat.shape[1]
 colIndices = np.sort(np.random.randint(numCols, size=numColSamples))
 sampledCols = outputMat[:, colIndices]
 
 baseDir = "/global/cscratch1/sd/nrcavana/CFSR_OCEAN/"
 varname = "POT_L160_Avg_1"
-metadata = np.load("oceanMetadata.npz")
+metadataFname = "output/oceanMetadata.npz"
+metadata = np.load(metadataFname)
 timeOffsets = np.concatenate([np.array(item) for item in metadata["timeSliceOffsets"]])
 fileNames = np.concatenate([np.array(item) for item in metadata["fileNames"]])
 fNames = fileNames[colIndices]

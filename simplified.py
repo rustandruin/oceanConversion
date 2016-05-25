@@ -93,7 +93,6 @@ def writeMetadata(foutName, procInfo):
     timeStamps = comm.gather(procInfo.timeStamps, root=0)
     timeSliceOffsets = comm.gather(procInfo.timeSliceOffsets, root=0)
     fileNames = comm.gather(procInfo.repeatedFileNames, root=0)
-    report(timeSliceOffsets)
 
     if rank == 0:
         timeStamps = np.concatenate(timeStamps)
@@ -240,10 +239,11 @@ class ProcessInformation(object):
         pass
 
 # Variables that should really be command-line settings
-DEBUGFLAG = True
+DEBUGFLAG = False
 numNodes = 20
 numProcessesPerNode = 10
 numWriters = 20 # a good choice is one per physical node
+
 verifyMaskQ = False
 dataInPath = "/global/cscratch1/sd/nrcavana/CFSR_OCEAN/"
 dataOutFname = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/output/ocean.h5"
@@ -261,7 +261,6 @@ report("Using %d processes" % numProcs)
 report("Writing variable %s " % varname)
 procInfo = ProcessInformation()
 fileNameList = loadFiles(dataInPath, varname, timevarname, procInfo)
-report(fileNameList[0])
 
 # expensive, but worth doing once to sanity check each dataset being converted
 if (verifyMaskQ):
