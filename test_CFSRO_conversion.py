@@ -63,6 +63,7 @@ for (idx, fName) in enumerate(fNames):
         curLevelDepths = np.concatenate([curLevelDepths, [levelDepths[levNum]] * np.count_nonzero(rawMask[timeOffset, levNum, ...])])
     rawDepths[:, idx] = curLevelDepths
     rawFin.close()
+    print "Loaded column %d/%d" % (idx+1, numColSamples)
 
 # these should be zero on success
 np.linalg.norm(rawCols - sampledCols)

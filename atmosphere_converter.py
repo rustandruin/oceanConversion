@@ -4,11 +4,11 @@
 #  -- should write out observation mask
 #  -- should write out column to date mapping
 
-# production run settings:
-# salloc -N 30 -t 150 -p regular --qos=premium
+# production run settings (took 19 minutes before w/ 100 nodes):
+# salloc -N 100 -t 25 -p regular --qos=premium
 # bash
 # module load h5py-parallel mpi4py netcdf4-python
-# srun -c 3 -n 300 -u python-mpi -u ./fname.py variablename
+# srun -c 3 -n 1000 -u python-mpi -u ./fname.py variablename
 #
 # Optimizations:
 # - turn off fill at allocation in hdf5
