@@ -1,6 +1,6 @@
 # Code for testing that the ocean climate data has been converted correctly from the 
-# multiple netcdf files into one large hdf5 file, and the latitudes recorded for each
-# observation are correct
+# multiple netcdf files into one large hdf5 file, and the latitudes and level depths 
+# recorded for each observation are correct
 #
 # To run: first do a 
 #  module load python netcdf4-python h5py
@@ -23,7 +23,7 @@ np.linalg.norm(rawCol - convertedCol) # this should be zero on success
 
 # FOR TESTING AFTER FULL CONVERSION, RUN THIS BLOCK OF CODE
 # randomly sample columns and check for equality with the data from the corresponding
-# original files and check that the latitudes for each observation were recorded accurately
+# original files and check that the latitudes and level depths for each observation were recorded accurately
 
 numColSamples = 20
 
@@ -41,10 +41,12 @@ timeOffsets = np.concatenate([np.array(item) for item in metadata["timeSliceOffs
 fileNames = np.concatenate([np.array(item) for item in metadata["fileNames"]])
 fNames = fileNames[colIndices]
 timeSliceOffsets = timeOffsets[colIndices]
-recordedLats = np.tile(metadata["observedLatCoords"], (20, 1)).transpose()
+recordedLats = np.tile(metadata["observedLatCoords"], (numColSamples, 1)).transpose()
+recordedLevelDepths =  np.tile(metadata["observedLevelDepths"], (numColSamples, 1)).transpose()
 
 rawCols = np.empty_like(sampledCols)
 rawLats = np.empty_like(sampledCols)
+rawDepths = np.empty_like(sampledCols)
 for (idx, fName) in enumerate(fNames):
     timeOffset = timeSliceOffsets[idx]
     rawFin = Dataset(baseDir + fName, "r")
@@ -54,8 +56,15 @@ for (idx, fName) in enumerate(fNames):
     latMesh = np.tile(latGrid, (rawData.shape[1],1,1))
     rawCols[:, idx] = rawData[timeOffset, rawMask[timeOffset, ...]]
     rawLats[:, idx] = latMesh[rawMask[timeOffset, ...]]
+
+    levelDepths = rawFin["level0"]
+    curLevelDepths = []
+    for levNum in xrange(rawData.shape[1]):
+        curLevelDepths = np.concatenate([curLevelDepths, [levelDepths[levNum]] * np.count_nonzero(rawMask[timeOffset, levNum, ...])])
+    rawDepths[:, idx] = curLevelDepths
     rawFin.close()
 
 # these should be zero on success
 np.linalg.norm(rawCols - sampledCols)
 np.linalg.norm(rawLats - recordedLats)
+np.linalg.norm(rawDepths - recordedLevelDepths)

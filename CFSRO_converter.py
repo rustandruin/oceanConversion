@@ -5,7 +5,13 @@
 Test settings:
 ensure DEBUGFLAG = True
 module load h5py-parallel mpi4py netcdf4-python python
- srun -c 3 -n 200 -u python-mpi -u ./simplified.py 
+ srun -c 3 -n 200 -u python-mpi -u ./CFSRO_converter.py 
+
+Full run settings:
+ensure DEBUGFLAG = False
+salloc -N 100 -t 150 -p regular --qos=premium
+module load h5py-parallel mpi4py netcdf4-python python
+srun -c 3 -n 1000 -u python-mpi -u ./CFSRO_converter.py 
 """
 
 from mpi4py import MPI
@@ -78,12 +84,16 @@ def loadFiles(dir, varName, timevarName, procInfo):
 
     latList = procInfo.fileHandleList[0]["lat"][:]
     lonList = procInfo.fileHandleList[0]["lon"][:]
+    levelDepths = procInfo.fileHandleList[0]["level0"][:]
     lonCoordGrid, latCoordGrid = np.meshgrid(lonList, latList)
     observedLatCoords = []
+    observedLevelDepths = []
     for levNum in xrange(procInfo.fileHandleList[0][varName].shape[1]):
         observedLatMask = np.logical_not(procInfo.fileHandleList[0][varName][0, levNum, ...].mask)
         observedLatCoords = np.concatenate([observedLatCoords, latCoordGrid[observedLatMask]])
+        observedLevelDepths = np.concatenate([observedLevelDepths, [levelDepths[levNum]]*np.count_nonzero(observedLatMask)])
     procInfo.observedLatCoords = observedLatCoords
+    procInfo.observedLevelDepths = observedLevelDepths
 
     return fileNameList
 
@@ -97,7 +107,8 @@ def writeMetadata(foutName, procInfo):
     if rank == 0:
         timeStamps = np.concatenate(timeStamps)
         np.savez(foutName, missingLocations=np.array(procInfo.missingLocations), timeStamps=timeStamps,
-                timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords)
+                timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords,
+                observedLevelDepths=procInfo.observedLevelDepths)
 
 def createDataset(fnameOut, procInfo):
     propfaid = h5py.h5p.create(h5py.h5p.FILE_ACCESS)
@@ -240,9 +251,9 @@ class ProcessInformation(object):
 
 # Variables that should really be command-line settings
 DEBUGFLAG = False
-numNodes = 20
+numNodes = 100 # number of physical nodes
 numProcessesPerNode = 10
-numWriters = 20 # a good choice is one per physical node
+numWriters = 60 # a good choice is one per physical node (probably up to the number of OSTs used)
 
 verifyMaskQ = False
 dataInPath = "/global/cscratch1/sd/nrcavana/CFSR_OCEAN/"
