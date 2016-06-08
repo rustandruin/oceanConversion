@@ -60,7 +60,7 @@ def loadFiles(dir, varName, timevarName, procInfo):
     """gets the list of all filenames in the data directory, divides them among the processes, opens them, populates some metadata"""
     fileNameList = [fname for fname in listdir(dir) if fname.endswith(".nc")]
     if (DEBUGFLAG):
-        fileNameList = fileNameList[:65]
+        fileNameList = fileNameList[:400]
         report("DEBUGGING! LIMITING NUMBER OF FILES CONVERTED")
     report("Found %d input files, starting to open" % len(fileNameList))
 
@@ -80,6 +80,7 @@ def loadFiles(dir, varName, timevarName, procInfo):
 
     # assumes the missing masks for observations are the same across timeslices
     procInfo.missingLocations = np.nonzero(procInfo.fileHandleList[0][varName][0, ...].mask.flatten())[0]
+    procInfo.observedLocations = np.nonzero(np.logical_not(procInfo.fileHandleList[0][varName][0, ...].mask.flatten()))[0]
     procInfo.numRows = len(np.nonzero(np.logical_not(procInfo.fileHandleList[0][varName][0, ...].mask.flatten()))[0])
 
     latList = procInfo.fileHandleList[0]["lat"][:]
@@ -103,12 +104,16 @@ def writeMetadata(foutName, procInfo):
     timeStamps = comm.gather(procInfo.timeStamps, root=0)
     timeSliceOffsets = comm.gather(procInfo.timeSliceOffsets, root=0)
     fileNames = comm.gather(procInfo.repeatedFileNames, root=0)
+    latList = procInfo.fileHandleList[0]["lat"][:]
+    lonList = procInfo.fileHandleList[0]["lon"][:]
+    depthList = procInfo.fileHandleList[0]["level0"][:]
 
     if rank == 0:
         timeStamps = np.concatenate(timeStamps)
         np.savez(foutName, missingLocations=np.array(procInfo.missingLocations), timeStamps=timeStamps,
                 timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords,
-                observedLevelDepths=procInfo.observedLevelDepths)
+                observedLevelDepths=procInfo.observedLevelDepths, latList=latList, lonList=lonList, depthList=depthList,
+                observedLocations=procInfo.observedLocations)
 
 def createDataset(fnameOut, procInfo):
     propfaid = h5py.h5p.create(h5py.h5p.FILE_ACCESS)
@@ -250,6 +255,10 @@ class ProcessInformation(object):
         pass
 
 # Variables that should really be command-line settings
+#DEBUGFLAG = True
+#numNodes = 20
+#numProcessesPerNode = 10
+#numWriters = 20
 DEBUGFLAG = False
 numNodes = 100 # number of physical nodes
 numProcessesPerNode = 10

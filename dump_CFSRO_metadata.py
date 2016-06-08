@@ -3,6 +3,7 @@
 import numpy as np
 import csv
 
+# for the CFSRO dataset, maps level numbers from the input netcdf files into actual level depth in meters
 depthLookupTable = {
         5: 10,
         15: 10,
@@ -46,23 +47,47 @@ depthLookupTable = {
         4478: 512
 }
 
-metadataFname = "output/oceanMetadata.npz"
-outLatFname = "output/latitudes.csv"
-outDepthFname = "output/depths.csv"
+outDir = 'testOutputs'
+metadataFname = outDir + "/oceanMetadata.npz"
+observedLatFname = outDir + "/observedLatitudes.csv"
+observedDepthFname = outDir + "/observedDepths.csv"
+latListFname = outDir + "/latList.lst"
+lonListFname = outDir + "/lonList.lst"
+depthListFname = outDir + "/depthList.lst"
+observedLocationsFname = outDir + "/observedLocations.lst"
+dateListFname = outDir + "/columnDates.lst"
 
 metadata = np.load(metadataFname)
 recordedLats = metadata["observedLatCoords"]
-recordedLevelDepths =  metadata["observedLevelDepths"]
-outLevelDepths = map(lambda levelIdx: depthLookupTable[int(levelIdx)], recordedLevelDepths)
+recordedLevelIndices =  metadata["observedLevelDepths"]
+observedLevelDepths = map(lambda levelIdx: depthLookupTable[int(levelIdx)], recordedLevelIndices)
 
-with open(outDepthFname, 'w') as csvfile:
+def strLine(number):
+    return str(number) + "\n"
+
+with open(dateListFname, 'w') as fout:
+    fout.writelines( map( lambda str: str + "\n", map("".join, metadata["timeStamps"]) ) )
+
+with open(latListFname, 'w') as fout:
+    fout.writelines( map(strLine, metadata["latList"]) )
+
+with open(lonListFname, 'w') as fout:
+    fout.writelines( map(strLine, metadata["lonList"]) )
+
+with open(depthListFname, 'w') as fout:
+    fout.writelines( map(strLine, map(lambda levelIdx: depthLookupTable[levelIdx], metadata["depthList"])) )
+
+with open(observedLocationsFname, 'w') as fout:
+    fout.writelines( map(strLine, metadata["observedLocations"]) )
+
+with open(observedDepthFname, 'w') as csvfile:
     fieldnames = ['rowidx', 'thickness']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-    for (idx, val) in enumerate(outLevelDepths):
+    for (idx, val) in enumerate(observedLevelDepths):
         writer.writerow({'rowidx' : idx, 'thickness' : val})
 
-with open(outLatFname, 'w') as csvfile:
+with open(observedLatFname, 'w') as csvfile:
     fieldnames = ['rowidx', 'latitude']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
