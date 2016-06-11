@@ -113,7 +113,7 @@ def writeMetadata(foutName, procInfo):
         np.savez(foutName, missingLocations=np.array(procInfo.missingLocations), timeStamps=timeStamps,
                 timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords,
                 observedLevelDepths=procInfo.observedLevelDepths, latList=latList, lonList=lonList, depthList=depthList,
-                observedLocations=procInfo.observedLocations)
+                observedLocations=procInfo.observedLocations, numLevels=numLevels, numLats=numLats, numLongs=numLongs)
 
 def createDataset(fnameOut, procInfo):
     propfaid = h5py.h5p.create(h5py.h5p.FILE_ACCESS)
