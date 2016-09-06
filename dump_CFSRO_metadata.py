@@ -47,7 +47,8 @@ depthLookupTable = {
         4478: 512
 }
 
-outDir = 'testOutputs'
+#outDir = 'testOutputs'
+outDir = 'output'
 metadataFname = outDir + "/oceanMetadata.npz"
 observedLatFname = outDir + "/observedLatitudes.csv"
 observedDepthFname = outDir + "/observedDepths.csv"
