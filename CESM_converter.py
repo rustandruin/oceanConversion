@@ -64,14 +64,13 @@ def loadFiles(dir, varName, timevarName, procInfo):
     procInfo.fileHandleList = map( lambda fname: Dataset(join(dir, fname), "r"), procInfo.fileNameList)
     procInfo.numTimeSlices = map( lambda fh: fh[varName].shape[0]/fileProcessMultiplier, procInfo.fileHandleList)
     procInfo.numLocalCols = np.sum(procInfo.numTimeSlices)
-    procInfo.localTimeRange = range(procInfo.numLocalCols * (rank % fileProcessMultiplier), procInfo.numLocalCols * (rank % fileProcessMultiplier + 1))
+    procInfo.timeSliceOffsets = range(procInfo.numLocalCols * (rank % fileProcessMultiplier), procInfo.numLocalCols * (rank % fileProcessMultiplier + 1))
 
     procInfo.colsPerProcess = np.empty((numProcs,), dtype=np.int)
     comm.Allgather(procInfo.numLocalCols, procInfo.colsPerProcess)
     procInfo.numCols = sum(procInfo.colsPerProcess)
     procInfo.outputColOffsets = np.hstack([[0], np.cumsum(procInfo.colsPerProcess[:-1])])
-    procInfo.timeStamps = np.concatenate(map(lambda fh: fh[timevarName][:], procInfo.fileHandleList))
-    procInfo.timeSliceOffsets = list(np.concatenate([ [idx for idx in xrange(numslices)] for numslices in procInfo.numTimeSlices]))
+    procInfo.timeStamps = procInfo.fileHandleList[0][timevarName][procInfo.timeSliceOffsets]
     procInfo.repeatedFileNames = np.concatenate( map(lambda idx: [procInfo.fileNameList[idx]]*procInfo.numTimeSlices[idx], xrange(procInfo.numFiles)))
 
     # assumes the missing masks for observations are the same across timeslices
@@ -180,9 +179,9 @@ def loadLevel(procInfo, varname, numLats, numLongs, curLev):
     colOffset = 0
     for (fhidx, fh) in enumerate(procInfo.fileHandleList):
         numTimeSlices = procInfo.numTimeSlices[fhidx]
-        localTimeRange = procInfo.localTimeRange
-        observedMask = np.logical_not(fh[varname][localTimeRange, curLev, ...].mask)
-        observedValues = fh[varname][localTimeRange, curLev, ...].data[observedMask]
+        timeSliceOffsets = procInfo.timeSliceOffsets
+        observedMask = np.logical_not(fh[varname][timeSliceOffsets, curLev, ...].mask)
+        observedValues = fh[varname][timeSliceOffsets, curLev, ...].data[observedMask]
         curLevData[:, colOffset:(colOffset + numTimeSlices)] = \
                 observedValues.reshape(numTimeSlices, procInfo.numObservationsPerTimeStepPerLevel).transpose()
         colOffset = colOffset + numTimeSlices
