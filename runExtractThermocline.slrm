@@ -1,0 +1,10 @@
+#!/bin/bash -l
+
+#SBATCH -C haswell
+#SBATCH -N 28
+#SBATCH -t 10
+#SBATCH -p debug
+
+bash
+module load python h5py-parallel
+srun -c 2 -n 896 -u python-mpi -u ./extractThermocline.py
