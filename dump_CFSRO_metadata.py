@@ -1,4 +1,4 @@
-# Run to convert the dumped metadata for the ocean data into csv files that Spark can load
+# Run to convert the metadata for the ocean data into csv files that Spark can load
 
 import numpy as np
 import csv
@@ -49,19 +49,25 @@ depthLookupTable = {
 
 #outDir = 'testOutputs'
 outDir = 'output'
-metadataFname = outDir + "/oceanMetadata.npz"
-observedLatFname = outDir + "/observedLatitudes.csv"
-observedDepthFname = outDir + "/observedDepths.csv"
-latListFname = outDir + "/latList.lst"
-lonListFname = outDir + "/lonList.lst"
-depthListFname = outDir + "/depthList.lst"
-observedLocationsFname = outDir + "/observedLocations.lst"
-dateListFname = outDir + "/columnDates.lst"
+metadataFname = outDir + "/oceanMetadata.npz" # the file containing all the metadata collected during the conversion process
+observedLatFname = outDir + "/observedLatitudes.csv" # latitude of the measurements on each row of the matrix
+observedLonFname = outDir + "/observedLongitudes.csv" # longitude of the measurements on each row of the matrix
+observedLevelFname = outDir + "/observedLevelIndices.csv" # level indicator of the measurements on each row of the matrix
+#observedDepthFname = outDir + "/observedDepths.csv" # depths of the measurements on each row of the matrix
+observedLocationsFname = outDir + "/observedLocations.lst" # for each row of the matrix, indicates the corresponding grid point in the original 3D grid (flattened to a vector) of measurements
+latListFname = outDir + "/latList.lst" # the values of latitude sampled to form the original 3D grid of measurements
+lonListFname = outDir + "/lonList.lst" # the values of longitude sampled to form the original 3D grid of measurements
+depthListFname = outDir + "/depthList.lst" # the values of depths sampled to form the original 3D grid of measurements
+dateListFname = outDir + "/columnDates.lst" # the date/time for each column of the matrix
 
 metadata = np.load(metadataFname)
 recordedLats = metadata["observedLatCoords"]
-recordedLevelIndices =  metadata["observedLevelDepths"]
-observedLevelDepths = map(lambda levelIdx: depthLookupTable[int(levelIdx)], recordedLevelIndices)
+recordedLons = metadata["observedLonCoords"]
+recordedLevelIndices = metadata["observedLevelNumbers"]
+#recordedLevelIndices =  metadata["observedLevelDepths"]
+
+# convert the level indices to actual depths in meters
+#observedLevelDepths = map(lambda levelIdx: depthLookupTable[int(levelIdx)], recordedLevelIndices)
 
 def strLine(number):
     return str(number) + "\n"
@@ -81,12 +87,19 @@ with open(depthListFname, 'w') as fout:
 with open(observedLocationsFname, 'w') as fout:
     fout.writelines( map(strLine, metadata["observedLocations"]) )
 
-with open(observedDepthFname, 'w') as csvfile:
-    fieldnames = ['rowidx', 'thickness']
+with open(observedLevelFname, 'w') as csvfile:
+    fieldnames = ['rowidx', 'levelindex']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-    for (idx, val) in enumerate(observedLevelDepths):
-        writer.writerow({'rowidx' : idx, 'thickness' : val})
+    for (idx, val) in enumerate(recordedLevelIndices):
+        writer.writerow({'rowidx' : idx, 'levelindex' : val})
+
+# with open(observedDepthFname, 'w') as csvfile:
+#     fieldnames = ['rowidx', 'thickness']
+#     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+# 
+#     for (idx, val) in enumerate(observedLevelDepths):
+#         writer.writerow({'rowidx' : idx, 'thickness' : val})
 
 with open(observedLatFname, 'w') as csvfile:
     fieldnames = ['rowidx', 'latitude']
@@ -94,3 +107,11 @@ with open(observedLatFname, 'w') as csvfile:
 
     for (idx, val) in enumerate(recordedLats):
         writer.writerow({'rowidx' : idx, 'latitude' : val})
+
+with open(observedLonFname, 'w') as csvfile:
+    fieldnames = ['rowidx', 'longitude']
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+    for (idx, val) in enumerate(recordedLons):
+        writer.writerow({'rowidx' : idx, 'longitude' : val})
+

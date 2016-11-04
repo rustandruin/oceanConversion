@@ -85,16 +85,18 @@ def loadFiles(dir, varName, timevarName, procInfo):
 
     latList = procInfo.fileHandleList[0]["lat"][:]
     lonList = procInfo.fileHandleList[0]["lon"][:]
-    levelDepths = procInfo.fileHandleList[0]["level0"][:]
     lonCoordGrid, latCoordGrid = np.meshgrid(lonList, latList)
     observedLatCoords = []
-    observedLevelDepths = []
+    observedLonCoords = []
+    observedLevelNumbers = []
     for levNum in xrange(procInfo.fileHandleList[0][varName].shape[1]):
         observedLatMask = np.logical_not(procInfo.fileHandleList[0][varName][0, levNum, ...].mask)
         observedLatCoords = np.concatenate([observedLatCoords, latCoordGrid[observedLatMask]])
-        observedLevelDepths = np.concatenate([observedLevelDepths, [levelDepths[levNum]]*np.count_nonzero(observedLatMask)])
+        observedLonCoords = np.concatenate([observedLonCoords, lonCoordGrid[observedLatMask]])
+        observedLevelNumbers = np.concatenate([observedLevelNumbers, [levNum]*np.count_nonzero(observedLatMask)])
     procInfo.observedLatCoords = observedLatCoords
-    procInfo.observedLevelDepths = observedLevelDepths
+    procInfo.observedLonCoords = observedLonCoords
+    procInfo.observedLevelNumbers = observedLevelNumbers
 
     return fileNameList
 
@@ -111,8 +113,8 @@ def writeMetadata(foutName, procInfo):
     if rank == 0:
         timeStamps = np.concatenate(timeStamps)
         np.savez(foutName, missingLocations=np.array(procInfo.missingLocations), timeStamps=timeStamps,
-                timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords,
-                observedLevelDepths=procInfo.observedLevelDepths, latList=latList, lonList=lonList, depthList=depthList,
+                timeSliceOffsets=timeSliceOffsets, fileNames=fileNames, observedLatCoords=procInfo.observedLatCoords, 
+                observedLonCoords=procInfo.observedLonCoords, observedLevelNumbers=procInfo.observedLevelNumbers, latList=latList, lonList=lonList, depthList=depthList,
                 observedLocations=procInfo.observedLocations, numLevels=numLevels, numLats=numLats, numLongs=numLongs)
 
 def createDataset(fnameOut, procInfo):
@@ -126,7 +128,6 @@ def createDataset(fnameOut, procInfo):
     plist.set_fill_time(h5py.h5d.FILL_TIME_NEVER)
     datasetid = h5py.h5d.create(fout.id, "rows", h5py.h5t.NATIVE_DOUBLE, spaceid, plist)
     rows = h5py.Dataset(datasetid)
-
 
     return (fout, rows)
 
@@ -266,10 +267,10 @@ numWriters = 60 # a good choice is one per physical node (probably up to the num
 
 verifyMaskQ = False
 dataInPath = "/global/cscratch1/sd/nrcavana/CFSR_OCEAN/"
-dataOutFname = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/output/ocean.h5"
+dataOutFname = "/global/cscratch1/sd/gittens/conversion-code/CFSRO_conversion/output/ocean.h5"
 varname = "POT_L160_Avg_1"
 timevarname = "ref_date_time"
-metadataFnameOut = "/global/cscratch1/sd/gittens/conversion-code/ocean_conversion/output/oceanMetadata.npz"
+metadataFnameOut = "/global/cscratch1/sd/gittens/conversion-code/CFSRO_conversion/output/oceanMetadata.npz"
 
 numLevels = 40
 numLats = 360
@@ -317,10 +318,3 @@ reportBarrier("Done writing")
 # close the open files
 map(lambda fh: fh.close(), procInfo.fileHandleList)
 fout.close()
-
-
-
-
-
-
-
